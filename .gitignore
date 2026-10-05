@@ -4,7 +4,8 @@ __pycache__/
 # PyInstaller 构建产物
 build/
 dist/
-*.spec
+# 保留项目自带打包配置
+!html-gui.spec
 
 # 构建日志
 build_out.txt
