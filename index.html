@@ -1,0 +1,266 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>html-gui - 网页UI设计器</title>
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="vendor/codemirror/codemirror.css">
+<link rel="stylesheet" href="vendor/codemirror/theme/darcula.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ======== 顶栏 ======== -->
+  <header id="topbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#5b8cff" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="#5b8cff" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>html-gui</span>
+      <em>v1.6</em>
+    </div>
+<div id="toolbar">
+      <button class="tb tool-btn active" id="tb-tool-move" title="移动工具 V"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/></svg></button>
+      <button class="tb tool-btn" id="tb-tool-paint" title="画笔工具 B"><svg viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 0 1 4 4L7 20l-4 1 1-4Z"/><path d="m14 6 4 4"/></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb" id="tb-undo" title="撤销 Ctrl+Z"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button class="tb" id="tb-redo" title="重做 Ctrl+Y"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb" id="tb-duplicate" title="复制所选 Ctrl+D"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      <button class="tb danger" id="tb-delete" title="删除所选 Del"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb align-btn" id="tb-align-left" title="左对齐"><svg viewBox="0 0 24 24"><path d="M4 5h14M4 10h10M4 15h14M4 20h8"/></svg></button>
+      <button class="tb align-btn" id="tb-align-cx" title="水平居中"><svg viewBox="0 0 24 24"><path d="M5 5h14M7 10h10M5 15h14M8 20h8"/></svg></button>
+      <button class="tb align-btn" id="tb-align-right" title="右对齐"><svg viewBox="0 0 24 24"><path d="M6 5h14M10 10h10M6 15h14M12 20h8"/></svg></button>
+      <button class="tb align-btn" id="tb-align-top" title="顶对齐"><svg viewBox="0 0 24 24" style="transform:rotate(90deg);"><path d="M4 5h14M4 10h10M4 15h14M4 20h8"/></svg></button>
+      <button class="tb align-btn" id="tb-align-cy" title="垂直居中"><svg viewBox="0 0 24 24" style="transform:rotate(90deg);"><path d="M5 5h14M7 10h10M5 15h14M8 20h8"/></svg></button>
+      <button class="tb align-btn" id="tb-align-bottom" title="底对齐"><svg viewBox="0 0 24 24" style="transform:rotate(90deg);"><path d="M6 5h14M10 10h10M6 15h14M12 20h8"/></svg></button>
+      <span class="tb-sep"></span>
+      <button class="tb" id="tb-save" title="保存项目 Ctrl+S"><svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+      <button class="tb accent" id="tb-export" title="导出 HTML Ctrl+E"><svg viewBox="0 0 24 24"><path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="m10 13 2 2 2-2M12 15v-5"/></svg><b>导出 HTML</b></button>
+      <span class="tb-sep"></span>
+      <button class="tb code-btn" id="tb-code" title="代码编辑器：CSS 样式 / JS 积木"><svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4 10 20"/></svg><b>代码</b></button>
+      <button class="tb" id="tb-preview" title="浏览器预览 F5"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></button>
+    </div>
+
+    <div id="top-zoom">
+      <button class="tb small" id="zoom-out" title="缩小">−</button>
+      <span id="zoom-label">100%</span>
+      <button class="tb small" id="zoom-in" title="放大">＋</button>
+      <button class="tb small" id="zoom-fit" title="适应窗口">⤢</button>
+    </div>
+  </header>
+
+  <!-- ======== 主区域 ======== -->
+  <div id="main">
+
+    <!-- 左侧 -->
+    <aside id="left">
+      <div id="rail">
+        <button class="rail-btn active" id="rail-components" title="组件库"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+        <button class="rail-btn" id="rail-layers" title="图层"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg></button>
+        <button class="rail-btn" id="rail-pages" title="页面"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg></button>
+        <span class="rail-sep"></span>
+        <button class="rail-btn" id="rail-bg" title="画布设置"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9Z"/><path d="M15 3a6 6 0 0 1 6 6h-6Z"/></svg></button>
+      </div>
+
+      <div id="left-panels">
+        <section id="panel-components" class="panel">
+          <div class="panel-head">组件库 <span class="hint">点击或拖入画布</span></div>
+          <div id="palette-search"><input id="palette-filter" type="text" placeholder="搜索组件…"></div>
+          <div id="palette-grid"></div>
+          <div id="template-block">
+            <div class="panel-head sub">模板 <span class="hint">一键插入</span></div>
+            <div id="template-grid"></div>
+          </div>
+          <div class="panel-tip">
+            双击画布中的<b>文字</b>可直接编辑<br>
+            选中后拖动 <b>8 个手柄</b> 可缩放<br>
+            <b>Shift+点击</b> 可多选<br>
+            选中多个元素后右键可<b>组合</b>
+          </div>
+        </section>
+
+        <section id="panel-layers" class="panel hidden">
+          <div class="panel-head">图层 <span class="hint" id="layer-count">0 项</span></div>
+          <div id="layer-list"></div>
+        </section>
+
+        <section id="panel-pages" class="panel hidden">
+          <div class="panel-head">页面 <span class="hint" id="page-count">1 页</span></div>
+          <div id="page-tools">
+            <button id="page-add" class="btn-mini primary">＋ 添加页面</button>
+          </div>
+          <div id="page-list"></div>
+          <div class="panel-tip-sub">双击页面名称可重命名</div>
+          <div class="panel-tip">一个项目可包含多个页面。导出 HTML 后自动生成顶部页面导航，点击即可切换页面。</div>
+        </section>
+
+        <section id="panel-canvas" class="panel hidden">
+          <div class="panel-head">画布设置</div>
+          <div class="prop">
+            <label>宽度</label><input type="number" id="cv-w" min="320" max="1920" step="10">
+          </div>
+          <div class="prop">
+            <label>高度</label><input type="number" id="cv-h" min="240" max="2400" step="10">
+          </div>
+          <div class="prop block">
+            <label>断点尺寸</label>
+            <div class="seg" data-bpseg="1">
+              <button class="seg-btn on" data-bp="desktop">桌面</button>
+              <button class="seg-btn" data-bp="tablet">平板</button>
+              <button class="seg-btn" data-bp="mobile">手机</button>
+            </div>
+            <div class="bp-size-row">
+              <span>桌面</span><input type="number" id="bp-w-desktop" min="320" max="1920" step="10"><span>×</span><input type="number" id="bp-h-desktop" min="240" max="2400" step="10">
+            </div>
+            <div class="bp-size-row">
+              <span>平板</span><input type="number" id="bp-w-tablet" min="320" max="1920" step="10"><span>×</span><input type="number" id="bp-h-tablet" min="240" max="2400" step="10">
+            </div>
+            <div class="bp-size-row">
+              <span>手机</span><input type="number" id="bp-w-mobile" min="320" max="1920" step="10"><span>×</span><input type="number" id="bp-h-mobile" min="240" max="2400" step="10">
+            </div>
+          </div>
+          <div class="panel-tip">断点尺寸用于桌面/平板/手机三档画布预览与媒体查询导出断点宽度，拖拽移动画布设置。</div>
+          <div class="prop">
+            <label>背景色</label><input type="color" id="cv-bg"><input type="text" id="cv-bg-hex" class="txt">
+          </div>
+          <div class="prop">
+            <label>页面主题</label><select id="cv-theme"></select>
+          </div>
+          <div class="prop">
+            <label>显示网格</label><label class="mini-switch"><input type="checkbox" id="cv-grid" checked><span></span></label>
+          </div>
+          <div class="prop block">
+            <label>全局 CSS</label>
+            <textarea id="cv-css" rows="5" spellcheck="false" placeholder="自定义样式代码，实时应用于画布并在导出时保留：&#10;.my-btn:hover { opacity: .85; }&#10;@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }"></textarea>
+          </div>
+          <div class="panel-tip">全局 CSS 可定义组件 class 的样式、动画与媒体查询，导出 HTML 时一并保留。</div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- 画布 -->
+    <div id="canvas-area">
+      <div id="canvas-scroll">
+        <div id="canvas">
+          <div id="stage" tabindex="0"></div>
+          <div id="empty-hint">从左侧组件库拖入组件开始设计<br><span>也可点击组件直接添加</span></div>
+        </div>
+      </div>
+      <div id="canvas-ruler-h"></div>
+      <div id="canvas-ruler-v"></div>
+    </div>
+
+    <!-- 右侧属性面板 -->
+    <aside id="right">
+      <div id="inspector"></div>
+    </aside>
+  </div>
+
+  <!-- ======== 状态栏 ======== -->
+  <footer id="statusbar">
+    <span id="sb-zoom">100%</span>
+    <span id="sb-page">页面 1</span>
+    <span id="sb-count">0 个元素</span>
+    <span id="sb-sel">未选中</span>
+    <span class="flex"></span>
+    <span id="sb-coord"></span>
+  </footer>
+</div>
+
+<div id="ctx-menu" class="hidden">
+  <div class="mi" data-cmd="duplicate">复制 <kbd>Ctrl+D</kbd></div>
+  <div class="mi" data-cmd="delete">删除 <kbd>Del</kbd></div>
+  <div class="sep"></div>
+  <div class="mi" data-cmd="top">置于顶层</div>
+  <div class="mi" data-cmd="bottom">置于底层</div>
+  <div class="sep"></div>
+  <div class="mi" data-cmd="duplicate-multi">多重复制</div>
+  <div class="sep"></div>
+  <div class="mi" data-cmd="group">组合 <kbd>Ctrl+G</kbd></div>
+  <div class="mi" data-cmd="ungroup">取消组合 <kbd>Ctrl+Shift+G</kbd></div>
+  <div class="sep"></div>
+  <div class="mi" data-cmd="center-h">水平居中于画布</div>
+  <div class="mi" data-cmd="center-v">垂直居中于画布</div>
+  <div class="mi" data-cmd="lockSel">锁定</div>
+  <div class="mi" data-cmd="unlockSel">解锁</div>
+  <div class="mi" data-cmd="hideSel">隐藏</div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<!-- ======== 代码编辑器（CSS / JS 积木） ======== -->
+<div id="code-overlay" class="overlay hidden">
+  <div id="code-modal">
+    <div class="code-head">
+      <div class="code-tabs">
+        <button class="code-tab active" data-tab="css">CSS 样式</button>
+        <button class="code-tab" data-tab="js">JS 积木 (Blockly)</button>
+      </div>
+      <div class="code-actions">
+        <span class="hint" id="js-status"></span>
+        <button id="code-close" class="btn-mini">关闭 (Esc)</button>
+      </div>
+    </div>
+    <div class="code-body">
+      <div id="css-editor-pane" class="code-pane active">
+        <div class="pane-toolbar">
+          <div class="seg css-mode-seg">
+            <button class="seg-btn on" data-cssmode="visual">可视化编辑</button>
+            <button class="seg-btn" data-cssmode="source">源码</button>
+          </div>
+          <span class="hint">通过控件调整样式自动生成 CSS，实时作用于画布，导出 HTML 时一并保留</span>
+          <button id="css-add-selector" class="btn-mini primary">＋ 新增选择器</button>
+        </div>
+        <div id="css-visual-wrap">
+          <div id="css-selector-panel">
+            <div class="css-sel-head">选择器</div>
+            <div id="css-selector-list"></div>
+            <div id="css-new-selector-row" class="hidden">
+              <input type="text" id="css-new-selector" placeholder="如 .my-btn 或 h1">
+              <button id="css-new-ok" class="btn-mini">添加</button>
+            </div>
+          </div>
+          <div id="css-control-panel">
+            <div class="css-sel-title" id="css-sel-title">body</div>
+            <div id="css-controls"></div>
+          </div>
+        </div>
+        <div class="css-preview-head">
+          <span class="hint">生成的 CSS（只读）</span>
+          <button id="css-copy" class="btn-mini">复制</button>
+        </div>
+        <textarea id="code-css-textarea" readonly spellcheck="false" placeholder=".my-btn:hover { opacity: .85; }"></textarea>
+        <div id="css-source-wrap" class="hidden">
+          <textarea id="css-source-textarea" spellcheck="false" placeholder=".my-btn:hover { opacity: .85; }"></textarea>
+        </div>
+      </div>
+      <div id="js-editor-pane" class="code-pane">
+        <div class="pane-toolbar">
+          <button id="js-gen" class="btn-mini primary">生成 JS 代码</button>
+          <button id="js-sample" class="btn-mini">载入示例</button>
+          <button id="js-clear" class="btn-mini">清空工作区</button>
+        </div>
+        <div id="blockly-div"></div>
+        <div class="js-output-head">
+          <span class="hint">生成的 JavaScript（自动保存，导出 HTML 时嵌入页面）</span>
+        </div>
+        <textarea id="code-js-output" readonly spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="vendor/blockly/blockly_compressed.js"></script>
+<script src="vendor/blockly/blocks_compressed.js"></script>
+<script src="vendor/blockly/javascript_compressed.js"></script>
+<script src="vendor/blockly/msg/zh-hans.js"></script>
+<script src="vendor/codemirror/codemirror.js"></script>
+<script src="vendor/codemirror/mode/css/css.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/app.js"></script>
+<script src="js/css-visual-editor.js"></script>
+<script src="js/code-editor.js"></script>
+</body>
+</html>
