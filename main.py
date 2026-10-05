@@ -79,9 +79,8 @@ class Bridge(QObject):
     def preview(self, html: str) -> str:
         """把 HTML 写到临时目录并用系统默认浏览器打开"""
         try:
-            tmp = tempfile.gettempdir()
-            path = os.path.join(tmp, "wuis_preview.html")
-            with open(path, "w", encoding="utf-8", newline="") as f:
+            fd, path = tempfile.mkstemp(prefix="wuis_preview_", suffix=".html", text=True)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
                 f.write(html)
             os.startfile(path)
             return json.dumps({"ok": True, "path": path})
@@ -171,8 +170,18 @@ class MainWindow(QMainWindow):
         self.lb_ready.setStyleSheet("color:#8a8f98; padding:0 12px; font-size:12px;")
 
     # ---------- 调用前端 ----------
+    # 仅允许菜单注册的固定动作进入，避免 JS 注入面
+    _ALLOWED_ACTIONS = frozenset({
+        "new", "open", "save", "export", "preview",
+        "undo", "redo", "duplicate", "delete", "top", "bottom",
+        "zoomIn", "zoomOut", "zoom100", "editCss", "editJs", "help", "about",
+    })
+
     def js(self, action: str):
-        self.view.page().runJavaScript(f"window.App && App.action('{action}')")
+        if action not in self._ALLOWED_ACTIONS:
+            return
+        arg = json.dumps(action)
+        self.view.page().runJavaScript(f"window.App && App.action({arg})")
 
 
 def main():

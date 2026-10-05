@@ -6,6 +6,8 @@
 
 (function () {
   const $ = (s, r) => (r || document).querySelector(s);
+  /* M5: 复用公共工具，避免与导出器行为漂移 */
+  const esc = window.HGUI_UTILS.esc;
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -194,22 +196,45 @@
   }
 
   /* ---------- 历史 ---------- */
+  /* H2: 快照包含完整多页结构（pages + pageIdx），撤销/重做不串页 */
   function snapshot() {
-    return JSON.parse(JSON.stringify({ title: state.title, stage: state.stage, elements: state.elements, groups: state.groups, css: state.css, jsCode: state.jsCode, jsXml: state.jsXml }));
+    return JSON.parse(JSON.stringify({
+      title: state.title, stage: state.stage, elements: state.elements,
+      groups: state.groups, css: state.css, jsCode: state.jsCode, jsXml: state.jsXml,
+      pages: state.pages, pageIdx: state.pageIdx
+    }));
   }
   function restore(snap) {
-    state.title = snap.title; state.stage = snap.stage; state.elements = snap.elements;
-    state.groups = snap.groups || [];
+    state.title = snap.title; state.stage = snap.stage;
     state.css = snap.css || "";
     state.jsCode = snap.jsCode || "";
     state.jsXml = snap.jsXml || "";
+    if (Array.isArray(snap.pages) && snap.pages.length) {
+      state.pages = snap.pages;
+      state.pageIdx = clamp(snap.pageIdx || 0, 0, state.pages.length - 1);
+      state.elements = state.pages[state.pageIdx].elements || [];
+      state.groups = (state.pages[state.pageIdx].groups || []).slice();
+    } else {
+      state.pages = [{ id: "page_1", name: "页面 1", elements: snap.elements || [], groups: snap.groups || [] }];
+      state.pageIdx = 0;
+      state.elements = state.pages[0].elements;
+      state.groups = (snap.groups || []).slice();
+    }
     state.selectedId = null;
   }
   function snapshotOf(i) { return JSON.parse(JSON.stringify(history[i])); }
+  /* M3: 历史栈上限 120 条 + 总内存预算 8MB，超出后从最旧端裁掉 */
   function pushHistory() {
     history = history.slice(0, histIdx + 1);
-    history.push(snapshot());
+    const snap = snapshot();
+    try { snap._bytes = JSON.stringify(snap).length; } catch (e) { snap._bytes = 0; }
+    history.push(snap);
     if (history.length > 120) history.shift();
+    let total = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      total += history[i]._bytes || 0;
+      if (total > 8 * 1024 * 1024 && i > 0) { history.splice(0, i); break; }
+    }
     histIdx = history.length - 1;
     updateUndoBtns();
   }
@@ -241,8 +266,11 @@
 
   /* ---------- 渲染 ---------- */
   const stageEl = () => $("#stage");
+  /* M2: id -> DOM 缓存，拖拽/缩放/局部更新避免全局查询 */
+  const domCache = new Map();
 
   function renderStage() {
+    domCache.clear();
     const st = stageEl();
     const ss = stageSize();
     st.style.width = ss.w + "px";
@@ -326,15 +354,12 @@
       + '<span class="h sw"></span><span class="h s"></span><span class="h se"></span>';
   }
 
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
+  /* M5: HTML 转义统一由 js/utils.js (window.HGUI_UTILS.esc) 提供 */
 
   /* 设计器内组件内部结构（可交互预览） */
   function elInnerHTML(el) {
     const p = el.props, st = el.style;
-    if (el.overrideHtml) return el.overrideHtml;   /* 用户自定义原始 HTML 覆盖内置渲染 */
+    if (el.overrideHtml) return HGUI_UTILS.sanitizeHtml(el.overrideHtml);   /* H1: 自定义覆盖 HTML 先剥离脚本/事件属性 */
     switch (el.type) {
       case "button":
         return '<button class="wuis-btn" style="background:' + bgc(st) + ';color:' + st.textColor
@@ -434,7 +459,7 @@
           + '<button class="wuis-btn" style="background:' + bgc(st) + ';color:' + st.textColor + ';font-size:' + st.fontSize + 'px;border-radius:' + st.radius + 'px;">' + esc(p.btnText || "打开弹窗") + '</button>'
           + '<div class="modal-mask" style="display:none;"><div class="modal-box"><b>' + esc(p.title || "弹窗标题") + '</b><span>' + esc(p.content || "") + '</span><button class="modal-close">关闭</button></div></div></div>';
       case "custom":
-        return p.html || "";
+        return HGUI_UTILS.sanitizeHtml(p.html || "");   /* H1: 自定义 HTML 剥离脚本/事件属性 */
       case "list": {
         const items = String(p.items || "").split(",").map(s => s.trim()).filter(Boolean);
         const m = { dot: "•", num: "1", check: "✓" }[p.mark] || "•";
@@ -568,6 +593,7 @@
 
   /* ---------- 元素交互绑定 ---------- */
   function bindElEvents(d, el) {
+    domCache.set(el.id, d);
     $$(".wuis-switch, .wuis-slider input, .wuis-check input, .wuis-radio input, .wuis-select", d).forEach(c => {
       c.addEventListener("mousedown", e => e.stopPropagation());
     });
@@ -762,7 +788,7 @@
     const rect = ds.stageRect;
     let dx = (e.clientX - ds.startX) / zoom;
     let dy = (e.clientY - ds.startY) / zoom;
-    const d = document.querySelector('.el[data-id="' + ds.el.id + '"]');
+    const d = domCache.get(ds.el.id) || null;
     if (ds.mode === "move") {
       if (Math.abs(e.clientX - ds.startX) + Math.abs(e.clientY - ds.startY) > 2) ds.moved = true;
       let nx = ds.ox + dx, ny = ds.oy + dy;
@@ -784,13 +810,23 @@
       setPos(ds.el, { x, y, w, h });
       if (d) { d.style.left = x + "px"; d.style.top = y + "px"; d.style.width = w + "px"; d.style.height = h + "px"; }
     }
-    syncInspectorNumbers();
-    updateCoord();
+    scheduleCoordSync();
+  }
+  /* M2: 拖拽高频同步用 rAF 节流 */
+  let coordSyncScheduled = false;
+  function scheduleCoordSync() {
+    if (coordSyncScheduled) return;
+    coordSyncScheduled = true;
+    requestAnimationFrame(() => {
+      coordSyncScheduled = false;
+      syncInspectorNumbers();
+      updateCoord();
+    });
   }
 
   function onDragEnd() {
     if (!dragState) return;
-    const d = document.querySelector('.el[data-id="' + dragState.el.id + '"]');
+    const d = domCache.get(dragState.el.id) || null;
     if (d) d.classList.remove("dragging");
     const moved = dragState.moved || dragState.mode === "resize";
     dragState = null;
@@ -907,6 +943,7 @@
     if (el.type === "custom") {
       h += '<div class="prop"><label>自定义 HTML</label><textarea rows="8" data-p="html" placeholder="在此编写组件原始 HTML"></textarea></div>';
     }
+    h += '<div class="prop"><label></label><span class="ip-hint">⚠ 导出时覆盖 HTML / 自定义 HTML 中的 script、iframe 及 on* 事件属性会被自动移除，请勿依赖其中的脚本逻辑。</span></div>';
     h += '<div class="prop block"><label>CSS 预览</label><textarea class="css-preview" rows="4" readonly spellcheck="false" data-c="cssPreview"></textarea></div>';
     h += '<div class="prop"><label></label><button class="btn-mini" data-icmd="copycss">复制样式代码</button></div>';
     h += '<div class="prop"><label></label><span class="ip-hint">class / 属性 / 内联样式 / 悬停样式 / 覆盖 HTML 均会在导出 HTML 时保留；悬停样式自动生成 :hover 规则。</span></div>';
@@ -1420,13 +1457,13 @@
   }
 
   function renderElementOnly(el) {
-    const old = document.querySelector('.el[data-id="' + el.id + '"]');
+    const old = domCache.get(el.id) || document.querySelector('.el[data-id="' + el.id + '"]');
     if (!old) return;
     const d = renderEl(el);
     old.replaceWith(d);
   }
   function applyStyleToDom(el) {
-    const d = document.querySelector('.el[data-id="' + el.id + '"]');
+    const d = domCache.get(el.id) || document.querySelector('.el[data-id="' + el.id + '"]');
     if (d) applyElStyle(d, el);
   }
 
@@ -1507,6 +1544,7 @@
     const sorted = state.elements.slice().sort((a, b) => (b.style.z || 0) - (a.style.z || 0));
     $("#layer-count").textContent = state.elements.length + " 项";
     list.innerHTML = "";
+    const frag = document.createDocumentFragment();
     sorted.forEach(el => {
       const row = document.createElement("div");
       row.className = "layer-item" + (el.id === state.selectedId ? " sel" : "");
@@ -1530,8 +1568,9 @@
         e.stopPropagation(); zStep(el, -1);
       });
       row.addEventListener("click", () => selectEl(el.id));
-      list.appendChild(row);
+      frag.appendChild(row);
     });
+    list.appendChild(frag);
   }
 
   function zStep(el, dir) {
@@ -2023,19 +2062,27 @@
 
   /* ---------- 页面管理 ---------- */
   function currentPage() { return state.pages[state.pageIdx] || { elements: state.elements }; }
-  function switchPage(i) {
+  /* M11: 页面引用切换收敛到 saveCurrentPage / loadPage 单点，消除 elements/groups 引用散落 */
+  function saveCurrentPage() {
+    if (!state.pages.length) return;
+    state.pages[state.pageIdx].elements = state.elements;
+    state.pages[state.pageIdx].groups = state.groups;
+  }
+  function loadPage(i, skipSave) {
     if (i < 0 || i >= state.pages.length) return;
-    currentPage().elements = state.elements;
-    currentPage().groups = state.groups;
+    if (!skipSave) saveCurrentPage();
     state.pageIdx = i;
     state.elements = state.pages[i].elements;
     state.groups = (state.pages[i].groups || []).slice();
     state.selectedId = null;
+  }
+  function switchPage(i) {
+    if (i < 0 || i >= state.pages.length) return;
+    loadPage(i);
     renderStage(); renderLayers(); renderInspector(); renderPages(); updateCount();
   }
   function addPage() {
-    currentPage().elements = state.elements;
-    currentPage().groups = state.groups;
+    saveCurrentPage();
     const pg = { id: "page_" + (state.pages.length + 1) + "_" + Date.now().toString(36), name: "页面 " + (state.pages.length + 1), elements: [], groups: [] };
     state.pages.push(pg);
     state.pageIdx = state.pages.length - 1;
@@ -2061,11 +2108,7 @@
     if (state.pages.length <= 1) { toast("至少保留一个页面"); return; }
     if (i === state.pageIdx) {
       state.pages.splice(i, 1);
-      const next = Math.max(0, i - 1);
-      state.pageIdx = next;
-      state.elements = state.pages[next].elements;
-      state.groups = (state.pages[next].groups || []).slice();
-      state.selectedId = null;
+      loadPage(Math.max(0, i - 1), true);
       renderStage(); renderLayers(); renderInspector(); renderPages(); updateCount(); pushHistory();
     } else {
       state.pages.splice(i, 1);
@@ -2082,6 +2125,7 @@
     const list = $("#page-list");
     if (!list) return;
     list.innerHTML = "";
+    const frag = document.createDocumentFragment();
     state.pages.forEach((pg, i) => {
       const row = document.createElement("div");
       row.className = "page-item" + (i === state.pageIdx ? " sel" : "");
@@ -2096,11 +2140,63 @@
         if (nm) renamePage(i, nm);
       });
       row.addEventListener("click", () => { if (i !== state.pageIdx) switchPage(i); });
-      list.appendChild(row);
+      frag.appendChild(row);
     });
+    list.appendChild(frag);
   }
 
   /* ---------- 项目保存 / 打开 / 导出 / 预览 ---------- */
+  /* H3: 打开项目 schema 校验 + 字段归一化 + version 迁移 */
+  function normalizeElement(el, idx) {
+    if (!el || typeof el !== "object" || Array.isArray(el)) return null;
+    const type = typeof el.type === "string" && TYPE_NAMES[el.type] ? el.type : null;
+    if (!type) return null;
+    const baseProps = (DEFAULT_PROPS[type] && typeof DEFAULT_PROPS[type] === "function") ? DEFAULT_PROPS[type]() : {};
+    const baseStyle = DEFAULT_STYLE();
+    const out = Object.assign({}, el, {
+      id: (typeof el.id === "string" && el.id) ? el.id : ("el_" + Date.now().toString(36) + "_" + idx),
+      type: type,
+      name: typeof el.name === "string" ? el.name : "",
+      visible: el.visible !== false,
+      locked: !!el.locked,
+      cls: typeof el.cls === "string" ? el.cls : "",
+      attrs: el.attrs && typeof el.attrs === "object" && !Array.isArray(el.attrs) ? el.attrs : {},
+      props: Object.assign({}, baseProps, (el.props && typeof el.props === "object") ? el.props : {}),
+      style: Object.assign({}, baseStyle, (el.style && typeof el.style === "object") ? el.style : {})
+    });
+    out.x = isFinite(+out.x) ? Math.max(0, Math.round(+out.x)) : 100;
+    out.y = isFinite(+out.y) ? Math.max(0, Math.round(+out.y)) : 100;
+    out.w = isFinite(+out.w) ? Math.max(12, Math.round(+out.w)) : (DEF_W[type] || 200);
+    out.h = isFinite(+out.h) ? Math.max(12, Math.round(+out.h)) : (DEF_H[type] || 120);
+    if (el.bp && typeof el.bp === "object") out.bp = el.bp;
+    if (el.overrideHtml != null) out.overrideHtml = HGUI_UTILS.sanitizeHtml(el.overrideHtml);
+    if (typeof out.props.html === "string") out.props.html = HGUI_UTILS.sanitizeHtml(out.props.html);
+    return out;
+  }
+  function validateProject(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return { ok: false, msg: "项目文件内容不是有效对象" };
+    let pages = [];
+    if (Array.isArray(data.pages) && data.pages.length) {
+      pages = data.pages.map((p, i) => {
+        const pg = (p && typeof p === "object") ? p : {};
+        const els = (Array.isArray(pg.elements) ? pg.elements : []).map((el, k) => normalizeElement(el, k)).filter(Boolean);
+        return {
+          id: (typeof pg.id === "string" && pg.id) ? pg.id : ("page_" + (i + 1)),
+          name: (typeof pg.name === "string" && pg.name.trim()) ? pg.name.trim() : ("页面 " + (i + 1)),
+          elements: els,
+          groups: Array.isArray(pg.groups) ? pg.groups : []
+        };
+      });
+    } else if (Array.isArray(data.elements)) {
+      pages = [{
+        id: "page_1", name: "页面 1",
+        elements: data.elements.map((el, k) => normalizeElement(el, k)).filter(Boolean),
+        groups: Array.isArray(data.groups) ? data.groups : []
+      }];
+    }
+    if (!pages.length) return { ok: false, msg: "项目中没有可用的元素数据（结构校验失败）" };
+    return { ok: true, pages: pages };
+  }
   function projectJSON() {
     const pages = state.pages.length ? state.pages : [{ id: "page_1", name: "页面 1", elements: state.elements }];
     return JSON.stringify({
@@ -2117,9 +2213,9 @@
         content: projectJSON(),
         filter: "html-gui 项目 (*.wuis);;JSON 文件 (*.json)"
       }), res => {
-        const r = JSON.parse(res);
-        if (r.ok) toast("项目已保存到 <b>" + r.path + "</b>");
-        else if (!r.cancel) toast("保存失败：" + r.msg);
+        const r = HGUI_UTILS.safeParse(res, null);
+        if (r && r.ok) toast("项目已保存到 <b>" + r.path + "</b>");
+        else if (!r || !r.cancel) toast("保存失败：" + (r && r.msg ? r.msg : "桥接返回异常"));
       });
     } else {
       fallbackDownload("project.wuis", projectJSON(), "text/plain");
@@ -2134,9 +2230,9 @@
         content: html,
         filter: "HTML 文件 (*.html)"
       }), res => {
-        const r = JSON.parse(res);
-        if (r.ok) toast("已导出 <b>" + r.path + "</b>");
-        else if (!r.cancel) toast("导出失败：" + r.msg);
+        const r = HGUI_UTILS.safeParse(res, null);
+        if (r && r.ok) toast("已导出 <b>" + r.path + "</b>");
+        else if (!r || !r.cancel) toast("导出失败：" + (r && r.msg ? r.msg : "桥接返回异常"));
       });
     } else {
       fallbackDownload(state.title + ".html", html, "text/html");
@@ -2147,42 +2243,50 @@
     const html = WUIS_EXPORTER.exportHTML(state);
     if (bridge) {
       bridge.preview(html, res => {
-        const r = JSON.parse(res);
-        if (r.ok) toast("已在浏览器中打开预览");
-        else toast("预览失败：" + r.msg);
+        const r = HGUI_UTILS.safeParse(res, null);
+        if (r && r.ok) toast("已在浏览器中打开预览");
+        else toast("预览失败：" + (r && r.msg ? r.msg : "桥接返回异常"));
       });
     } else {
-      const w = window.open("", "_blank");
-      if (w) { w.document.write(html); w.document.close(); }
+      /* L6: 浏览器降级模式改用 Blob URL，避免弹窗拦截与 document.write */
+      try {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 60000);
+      } catch (e) {
+        toast("预览失败（浏览器模式不支持）");
+      }
     }
   }
 
   function doOpen() {
     if (!bridge) { toast("请在本软件内使用打开功能"); return; }
     bridge.openFile(res => {
-      const r = JSON.parse(res);
+      const r = HGUI_UTILS.safeParse(res, null);
+      if (!r) { toast("打开失败：桥接返回异常"); return; }
       if (r.cancel) return;
       if (!r.ok) { toast("打开失败：" + r.msg); return; }
       try {
-        const data = JSON.parse(r.content);
-        if (!data || (!Array.isArray(data.elements) && !Array.isArray(data.pages))) throw new Error("格式不正确");
-        state.title = data.title || "未命名页面";
-        state.stage = Object.assign({ w: 1280, h: 720, bg: "#ffffff", grid: true, bp: { tablet: { w: 768, h: 1024 }, mobile: { w: 390, h: 844 } } }, data.stage);
+        const data = HGUI_UTILS.safeParse(r.content, null);
+        const v = validateProject(data);
+        if (!v.ok) throw new Error(v.msg);
+        state.title = (data && typeof data.title === "string" && data.title.trim()) ? data.title.trim() : "未命名页面";
+        state.stage = Object.assign({ w: 1280, h: 720, bg: "#ffffff", grid: true, bp: { tablet: { w: 768, h: 1024 }, mobile: { w: 390, h: 844 } } }, data.stage || {});
         if (!state.stage.bp) state.stage.bp = { tablet: { w: 768, h: 1024 }, mobile: { w: 390, h: 844 } };
-        if (Array.isArray(data.pages) && data.pages.length) {
-          state.pages = data.pages.map((p, i) => ({ id: p.id || ("page_" + (i + 1)), name: p.name || ("页面 " + (i + 1)), elements: p.elements || [], groups: p.groups || [] }));
-          state.pageIdx = Math.max(0, Math.min(data.pageIdx || 0, state.pages.length - 1));
-          state.elements = state.pages[state.pageIdx].elements;
-          state.groups = (state.pages[state.pageIdx].groups || []).slice();
-        } else {
-          state.pages = [{ id: "page_1", name: "页面 1", elements: data.elements || [], groups: [] }];
-          state.pageIdx = 0;
-          state.elements = state.pages[0].elements;
-          state.groups = [];
-        }
-        state.css = data.css || "";
-        state.jsCode = data.jsCode || "";
-        state.jsXml = data.jsXml || "";
+        state.pages = v.pages;
+        state.pageIdx = clamp(data.pageIdx || 0, 0, state.pages.length - 1);
+        state.elements = state.pages[state.pageIdx].elements;
+        state.groups = (state.pages[state.pageIdx].groups || []).slice();
+        state.css = typeof data.css === "string" ? data.css : "";
+        state.jsCode = typeof data.jsCode === "string" ? data.jsCode : "";
+        state.jsXml = typeof data.jsXml === "string" ? data.jsXml : "";
         state.selectedId = null;
         history = [snapshot()];
         histIdx = 0;
@@ -2267,7 +2371,7 @@
       case "save": doSaveProject(); break;
       case "export": doExport(); break;
       case "preview": doPreview(); break;
-      case "codeEditor": if (window.WUIS_CODE_EDITOR) window.WUIS_CODE_EDITOR.open("css"); break;
+      case "codeEditor": /* L5: 与 editCss 合并为同一分支 */
       case "editCss": if (window.WUIS_CODE_EDITOR) window.WUIS_CODE_EDITOR.open("css"); break;
       case "editJs": if (window.WUIS_CODE_EDITOR) window.WUIS_CODE_EDITOR.open("js"); break;
       case "undo": undo(); break;
@@ -2443,7 +2547,9 @@
       else if (mod && e.shiftKey && e.key === "[") { e.preventDefault(); zBottom(); }
       else if (e.key === "Delete" || e.key === "Backspace") {
         if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
-        e.preventDefault(); delSelected();
+        e.preventDefault();
+        if (!selList().length) { toast("未选中任何组件，无需删除"); return; }   /* L8: 无选中时给出反馈 */
+        delSelected();
       }
       else if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
         if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
@@ -2469,20 +2575,33 @@
   }
 
   /* ---------- 桥接 Python ---------- */
+  /* M1: 将内部实现挂到 window.HGUI_APP_INTERNALS，供 setupBridge / 外部模块调用，降低 IIFE 巨型耦合 */
+  /* M10: 浏览器直开（无 qt.webChannelTransport）时自动降级为浏览器下载/新窗口预览；桌面壳内等待动态加载的 qwebchannel.js 就绪 */
   function setupBridge() {
     if (typeof qt !== "undefined" && qt.webChannelTransport) {
-      new QWebChannel(qt.webChannelTransport, ch => {
-        bridge = ch.objects.bridge;
-        toast("html-gui 已就绪");
-      });
+      const tryInit = () => {
+        if (typeof QWebChannel === "undefined") return false;
+        try {
+          new QWebChannel(qt.webChannelTransport, ch => {
+            bridge = ch.objects.bridge;
+            toast("html-gui 已就绪");
+          });
+          return true;
+        } catch (e) {
+          return false;
+        }
+      };
+      if (!tryInit()) {
+        window.addEventListener("wuis-bridge-ready", tryInit, { once: true });
+      }
     }
   }
 
   /* ---------- 初始化 ---------- */
   function init() {
-    pushHistory();
     state.pages = [{ id: "page_1", name: "页面 1", elements: state.elements, groups: [] }];
     state.pageIdx = 0;
+    pushHistory();
     renderStage();
     setupPalette();
     setupTemplates();
@@ -2503,6 +2622,20 @@
     window.addEventListener("resize", () => { /* 不做自动缩放 */ });
   }
 
+  /* M1: 暴露内部实现到全局命名空间，作为子模块桥接入口（外部通过 window.App 调用） */
+  window.HGUI_APP_INTERNALS = {
+    state: () => state,
+    bridge: () => bridge,
+    setBridge: b => { bridge = b; },
+    action: action,
+    applyStudioCss: applyStudioCss,
+    syncCanvasPanel: syncCanvasPanel,
+    markDirty: markDirty,
+    toast: toast,
+    validateProject: validateProject,        /* H3: 暴露校验入口，便于测试与外部模块复用 */
+    normalizeElement: normalizeElement,
+    renderStage: renderStage,                /* 供测试与子模块刷新画布 */
+  };
   window.App = {
     action: action,
     getScriptState: () => ({ css: state.css, jsCode: state.jsCode, jsXml: state.jsXml }),

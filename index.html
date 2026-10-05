@@ -251,13 +251,28 @@
   </div>
 </div>
 
-<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<!-- M10: 桌面壳内动态加载 Qt 内置 WebChannel；普通浏览器直开时不加载并自动降级为浏览器保存/预览 -->
+<script>
+(function () {
+  function loadBridge() {
+    if (typeof qt !== "undefined" && qt.webChannelTransport) {
+      var s = document.createElement("script");
+      s.src = "qrc:///qtwebchannel/qwebchannel.js";
+      s.onload = function () { window.dispatchEvent(new CustomEvent("wuis-bridge-ready")); };
+      document.head.appendChild(s);
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadBridge);
+  else loadBridge();
+})();
+</script>
 <script src="vendor/blockly/blockly_compressed.js"></script>
 <script src="vendor/blockly/blocks_compressed.js"></script>
 <script src="vendor/blockly/javascript_compressed.js"></script>
 <script src="vendor/blockly/msg/zh-hans.js"></script>
 <script src="vendor/codemirror/codemirror.js"></script>
 <script src="vendor/codemirror/mode/css/css.js"></script>
+<script src="js/utils.js"></script>
 <script src="js/exporter.js"></script>
 <script src="js/app.js"></script>
 <script src="js/css-visual-editor.js"></script>

@@ -1,0 +1,8 @@
+# html-gui 运行与开发依赖
+# 安装：pip install -r requirements.txt
+
+# 运行时
+PySide6>=6.5,<7        # Qt for Python，提供窗口壳与 QWebChannel 桥接
+
+# 构建（打包 exe）
+pyinstaller>=6.0       # 配合 html-gui.spec 使用：pyinstaller html-gui.spec

@@ -6,11 +6,11 @@
 "use strict";
 
 const WUIS_EXPORTER = (function () {
-
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  /* M4/M5: 转义统一复用 js/utils.js，消除与 app.js 的重复实现 */
+  const esc = window.HGUI_UTILS.esc;
+  /* H1: 清理可能被注入到 style 属性的 CSS 值 */
+  function scrubCss(v) {
+    return String(v == null ? "" : v).replace(/[<>"]/g, "").replace(/[\r\n]/g, " ");
   }
 
   const PALETTE = ["#4f8cff", "#29c4a9", "#ff9f43", "#f5576c", "#8e5cf7", "#f7b731", "#2dd4bf", "#a78bfa"];
@@ -251,7 +251,7 @@ const WUIS_EXPORTER = (function () {
           + '<span class="wnt-text" style="color:' + t.fg + ";font-size:" + st.fontSize + 'px;">' + esc(p.text || "") + '</span></div>';
       }
       case "custom": {
-        return p.html || "";
+        return HGUI_UTILS.sanitizeHtml(p.html || "");   /* H1: 自定义 HTML 剥离脚本/事件属性 */
       }
       default:
         return "";
@@ -319,10 +319,10 @@ const WUIS_EXPORTER = (function () {
     const st = el.style || {};
     const common = "left:" + el.x + "px;top:" + el.y + "px;width:" + el.w + "px;height:" + el.h + "px;opacity:" + (st.opacity || 1) + ";transform:rotate(" + (st.rotate || 0) + "deg);z-index:" + (st.z || 1);
     let extra = "";
-    if (st.bgGradient && el.type !== "button" && el.type !== "badge" && el.type !== "container" && el.type !== "modal") extra += "background:" + st.bgGradient + ";";
-    if (st.shadow && st.shadow !== "none") extra += "box-shadow:" + st.shadow + ";";
-    if (st.fontFamily) extra += "font-family:" + st.fontFamily + ";";
-    if (st.inlineCss) extra += String(st.inlineCss) + ";";
+    if (st.bgGradient && el.type !== "button" && el.type !== "badge" && el.type !== "container" && el.type !== "modal") extra += "background:" + scrubCss(st.bgGradient) + ";";
+    if (st.shadow && st.shadow !== "none") extra += "box-shadow:" + scrubCss(st.shadow) + ";";
+    if (st.fontFamily) extra += "font-family:" + scrubCss(st.fontFamily) + ";";
+    if (st.inlineCss) extra += scrubCss(String(st.inlineCss)) + ";";
     const anim = (el.props && el.props.showAnimation && el.props.showAnimation !== "none") ? ' data-anim="' + esc(el.props.showAnimation) + '"' : "";
     const adur = (el.props && el.props.showAnimation !== "none" && el.props.animDuration) ? ' style="--anim-dur:' + el.props.animDuration + "ms\"" : "";
     const act = (el.props && el.props.clickAction && el.props.clickAction !== "none") ? ' data-action="' + esc(el.props.clickAction) + '"' : "";
@@ -337,7 +337,8 @@ const WUIS_EXPORTER = (function () {
         }
       });
     }
-    const inner = el.overrideHtml ? String(el.overrideHtml) : innerHTML(el.type, el.props, st, el.w, el.h);
+    const rawInner = el.overrideHtml ? String(el.overrideHtml) : innerHTML(el.type, el.props, st, el.w, el.h);
+    const inner = HGUI_UTILS.sanitizeHtml(rawInner);   /* H1: 统一剥离脚本/iframe/on* 属性 */
     return '<div class="' + cls + '" data-el-id="' + esc(el.id) + '" data-type="' + esc(el.type) + '"' + act + tgt + anim + attrs + ' style="' + common + ";" + extra + hidden + '">' + inner + "</div>";
   }
 
@@ -582,6 +583,14 @@ document.addEventListener('DOMContentLoaded',function(){fit();replay(PAGES[0]);}
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fit);}else{fit();replay(PAGES[0]);}
 })();`;
 
+  /* H1: 防止用户 CSS/JS 内容闭合内嵌 style/script 标签注入 */
+  function safeCss(v) {
+    return String(v == null ? "" : v).replace(/<\/style/gi, "<\\/style");
+  }
+  function safeJs(v) {
+    return String(v == null ? "" : v).replace(/<\/script/gi, "<\\/script");
+  }
+
   /* 导出完整 HTML（多页面支持） */
   function exportHTML(state) {
     const st = state.stage || { w: 1280, h: 720, bg: "#ffffff", grid: true };
@@ -599,11 +608,11 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
 
     /* 全局自定义 CSS + 各组件 hover 规则 */
     let extraCss = "";
-    if (state.css) extraCss += "\n" + String(state.css);
+    if (state.css) extraCss += "\n" + safeCss(state.css);
     const allEls = pages.reduce((a, p) => a.concat(p.elements || []), []);
     allEls.forEach(el => {
       if (el.style && el.style.hoverCss) {
-        extraCss += '\n.el[data-el-id="' + esc(el.id) + '"]:hover{' + String(el.style.hoverCss) + "}";
+        extraCss += '\n.el[data-el-id="' + esc(el.id) + '"]:hover{' + safeCss(el.style.hoverCss) + "}";
       }
     });
     if (extraCss) extraCss += "\n";
@@ -614,9 +623,12 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
     const tabH = (bpCfg.tablet && bpCfg.tablet.h) || 1024;
     const mobW = (bpCfg.mobile && bpCfg.mobile.w) || 390;
     const mobH = (bpCfg.mobile && bpCfg.mobile.h) || 844;
+    /* L7: 断点区间 clamp，避免极端画布配置生成倒置/非法媒体查询 */
+    const hasTabRange = st.w > tabW;
+    const hasMobRange = tabW > mobW;
     let respCss = "";
-    respCss += "\n@media (max-width:" + (tabW - 1) + "px){.wuis-page{width:" + mobW + "px;height:" + mobH + "px}}";
-    respCss += "\n@media (min-width:" + tabW + "px) and (max-width:" + (st.w - 1) + "px){.wuis-page{width:" + tabW + "px;height:" + tabH + "px}}";
+    if (hasMobRange) respCss += "\n@media (max-width:" + (tabW - 1) + "px){.wuis-page{width:" + mobW + "px;height:" + mobH + "px}}";
+    if (hasTabRange) respCss += "\n@media (min-width:" + tabW + "px) and (max-width:" + (st.w - 1) + "px){.wuis-page{width:" + tabW + "px;height:" + tabH + "px}}";
     pages.forEach(pg => {
       (pg.elements || []).forEach(el => {
         const b = el.bp || {};
@@ -630,14 +642,14 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
           if (o.h != null) rect.h = o.h;
           respCss += "\n" + media + '{.el[data-el-id="' + esc(el.id) + '"]{left:' + rect.x + "px!important;top:" + rect.y + "px!important;width:" + rect.w + "px!important;height:" + rect.h + "px!important}}";
         };
-        pushRule("tablet", "@media (min-width:" + tabW + "px) and (max-width:" + (st.w - 1) + "px)");
-        pushRule("mobile", "@media (max-width:" + (tabW - 1) + "px)");
+        if (hasTabRange) pushRule("tablet", "@media (min-width:" + tabW + "px) and (max-width:" + (st.w - 1) + "px)");
+        if (hasMobRange) pushRule("mobile", "@media (max-width:" + (tabW - 1) + "px)");
       });
     });
 
     /* 用户脚本：Blockly 积木生成的 JS（嵌入导出页） */
     let extraJs = "";
-    if (state.jsCode && String(state.jsCode).trim()) extraJs = "\n" + String(state.jsCode);
+    if (state.jsCode && String(state.jsCode).trim()) extraJs = "\n" + safeJs(state.jsCode);
 
     return "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>" + esc(state.title || "html-gui 导出页面") + "</title>\n<style>\n" + EXPORT_CSS + respCss + extraCss + "</style>\n</head>\n<body>\n  " + navHtml + '\n  <div class="wuis-pages">\n' + pageHtml + "\n  </div>\n<script>\n" + RUNTIME + extraJs + "\n</script>\n</body>\n</html>";
   }

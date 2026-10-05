@@ -16,6 +16,8 @@
   --text-3: #6d7278;
   --accent: #3f8cff;
   --accent-soft: rgba(63,140,255,.14);
+  --accent-hover: #4d97ff;      /* L3: 主题色收敛为变量 */
+  --accent-strong: #2563eb;     /* L3: 强调/选中态主色 */
   --danger: #e5484d;
   --font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
 }
@@ -79,7 +81,7 @@ body {
   background: var(--accent); font-size: 12.5px; font-weight: 500; border-radius: 4px;
 }
 .tb.accent b { font-weight: 600; }
-.tb.accent:hover { background: #4d97ff; color: #fff; }
+.tb.accent:hover { background: var(--accent-hover); color: #fff; }
 .tb.small { width: 26px; font-size: 14px; color: var(--text-2); }
 .tb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 5px; }
 
@@ -703,7 +705,7 @@ body {
 .code-actions .hint{font-size:12px;color:#7f8494;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn-mini{background:#33363e;border:1px solid #43464f;color:#dfe2ea;padding:5px 12px;border-radius:5px;font-size:12px;cursor:pointer}
 .btn-mini:hover{background:#3c4049}
-.btn-mini.primary{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn-mini.primary{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff}
 .btn-mini.primary:hover{background:#1d4ed8}
 .code-body{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
 .code-pane{display:none;flex:1;flex-direction:column;min-height:0}
@@ -728,9 +730,8 @@ body {
 #css-selector-list{flex:1;overflow:auto;padding:6px}
 .css-sel-item{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:#cfd3dc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
 .css-sel-item:hover{background:#2b2c33}
-.css-sel-item.on{background:#2563eb;color:#fff}
+.css-sel-item.on{background:var(--accent-strong);color:#fff}
 #css-new-selector-row{padding:6px;display:flex;gap:6px;border-top:1px solid #33353e;flex:none}
-#css-new-selector{flex:1;min-width:0}
 #css-control-panel{flex:1;overflow:auto;padding:10px 14px;background:#1a1b21}
 .css-sel-title{font-size:15px;font-weight:600;color:#e5e7eb;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #33353e}
 .css-group{font-size:12px;color:#7dd3fc;margin:14px 0 6px;font-weight:600;letter-spacing:.5px}
@@ -747,7 +748,7 @@ body {
 #css-controls .mini-switch{position:relative;display:inline-block;width:34px;height:18px;flex:none}
 #css-controls .mini-switch input{display:none}
 #css-controls .mini-switch span{position:absolute;inset:0;background:#3a3c45;border-radius:9px;cursor:pointer;transition:.2s}
-#css-controls .mini-switch input:checked+span{background:#2563eb}
+#css-controls .mini-switch input:checked+span{background:var(--accent-strong)}
 #css-controls .mini-switch span:before{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.2s}
 #css-controls .mini-switch input:checked+span:before{left:18px}
 .css-preview-head{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#26272e;border-top:1px solid #33353e;flex:none}
@@ -759,6 +760,6 @@ body {
 .css-mode-seg .seg-btn{background:#33363e;border:none;color:#aab0bd;padding:5px 14px;font-size:12px;cursor:pointer;border-right:1px solid #43464f}
 .css-mode-seg .seg-btn:last-child{border-right:none}
 .css-mode-seg .seg-btn:hover{color:#dfe2ea}
-.css-mode-seg .seg-btn.on{background:#2563eb;color:#fff;font-weight:600}
-#css-new-selector{background:#111318;border:1px solid #43464f;color:#dfe2ea;border-radius:5px;padding:5px 8px;font-size:12px;outline:none;box-sizing:border-box}
-#css-new-selector:focus{border-color:#2563eb}
+.css-mode-seg .seg-btn.on{background:var(--accent-strong);color:#fff;font-weight:600}
+#css-new-selector{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line-2);color:var(--text);border-radius:5px;padding:5px 8px;font-size:12px;outline:none;box-sizing:border-box}
+#css-new-selector:focus{border-color:var(--accent-strong)}

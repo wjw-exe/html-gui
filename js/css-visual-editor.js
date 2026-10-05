@@ -63,9 +63,38 @@ window.WUIS_CSS_VISUAL = (function () {
   }
 
   /* ---------- CSS 解析 / 序列化 ---------- */
+  /* M6: 改用浏览器 CSSOM 解析（style.sheet.cssRules），无效声明交给引擎处理，保留正则兜底 */
   function parseCss(css) {
     const result = [];
     if (css && css.trim()) {
+      try {
+        const styleEl = document.createElement("style");
+        styleEl.setAttribute("data-hgui-cssom", "1");
+        styleEl.textContent = css;
+        (document.head || document.documentElement).appendChild(styleEl);
+        const sheet = styleEl.sheet;
+        const list = (sheet && sheet.cssRules) ? sheet.cssRules : [];
+        for (let i = 0; i < list.length; i++) {
+          const r = list[i];
+          if (!r || r.type !== CSSRule.STYLE_RULE) continue; // 跳过 @media/@import 等非样式规则
+          const props = {};
+          const extra = [];
+          const st = r.style;
+          for (let j = 0; j < st.length; j++) {
+            const k = st[j];
+            const v = st.getPropertyValue(k);
+            if (PROP_KEYS[k]) props[k] = v;
+            else extra.push(k + ": " + v + ";");
+          }
+          const selector = (r.selectorText || "").trim().replace(/\s+/g, " ");
+          if (selector) result.push({ selector: selector, props: props, extra: extra });
+        }
+        styleEl.remove();
+      } catch (e) {
+        // CSSOM 不可用时退化到正则解析
+      }
+    }
+    if (!result.length && css && css.trim()) {
       const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
       let m;
       while ((m = ruleRe.exec(css))) {

@@ -32,12 +32,17 @@ html-gui 是一款**拖拽式网页 UI 设计器**，以 Windows 桌面程序形
 html-gui/
 ├── main.py            # 程序入口：PySide6 桌面外壳，菜单/状态栏与 JS-Python 桥
 ├── index.html         # 设计器主页面（顶栏、组件库、画布、属性面板）
+├── requirements.txt   # 运行时依赖锁定清单（PySide6 / PyInstaller 版本范围）
+├── html-gui.spec      # PyInstaller 打包配置（含 index.html/css/js/vendor 资源收集）
 ├── css/
-│   └── app.css        # 设计器界面样式
+│   └── app.css        # 设计器界面样式（主题色已收敛为 CSS 自定义属性）
 ├── js/
-│   ├── app.js         # 核心逻辑：状态/渲染/拖拽/缩放/属性面板/图层/撤销重做
-│   └── exporter.js    # 独立 HTML 导出器
-├── html-gui.spec   # PyInstaller 打包配置（本地构建用）
+│   ├── app.js         # 核心逻辑：状态/渲染/拖拽/缩放/属性面板/图层/页面/撤销重做
+│   ├── utils.js       # 公共工具（转义/安全解析/HTML 净化），app.js 与 exporter.js 共用
+│   ├── exporter.js    # 独立 HTML 导出器
+│   ├── code-editor.js # CSS/JS 代码编辑器（CodeMirror + Blockly）
+│   └── css-visual-editor.js # CSS 可视化编辑（CSSOM 解析，失败时回退源码模式）
+├── vendor/            # 第三方前端库（Blockly / CodeMirror，版本与许可见 vendor/README.md）
 ├── build/             # PyInstaller 中间产物（不提交）
 └── dist/              # 打包输出目录（不提交）
 ```
@@ -52,8 +57,10 @@ html-gui/
 ### 安装依赖
 
 ```bash
-pip install PySide6 pyinstaller
+pip install -r requirements.txt
 ```
+
+（`requirements.txt` 已锁定 PySide6 / PyInstaller 的版本范围，避免换机/交付时大版本行为差异。）
 
 ### 开发运行
 
@@ -69,17 +76,18 @@ python main.py
 pyinstaller html-gui.spec
 ```
 
-或使用命令行方式（需手动附带前端资源）：
+或使用命令行方式（需手动附带全部前端资源，含 vendor）：
 
 ```bash
 pyinstaller --noconsole --name html-gui \
   --add-data "index.html;." \
   --add-data "css;css" \
   --add-data "js;js" \
+  --add-data "vendor;vendor" \
   main.py
 ```
 
-打包完成后，可执行文件位于 `dist/html-gui/html-gui.exe`，可直接分发使用。
+打包完成后，可执行文件位于 `dist/html-gui/html-gui.exe`，可直接分发使用。浏览器直开 `index.html` 时编辑器可独立调试，桌面桥接能力（保存/打开/预览）自动降级为浏览器下载/新标签预览。
 
 ## 许可证
 
